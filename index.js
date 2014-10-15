@@ -24,11 +24,10 @@ module.exports = {
   storage : {},
   listen : {},
   expand : function( module ){
-    console.log( "drivers",this.drivers)
     var root = this
     if( module.models ){
       _.forEach( module.models, function( model){
-        ZERO.mlog('storage', 'handle', model.identity,model.isFile && model.storage && root.drivers[model.storage])
+        ZERO.mlog('storage', 'handle', model.identity)
         var storageInfo = {}
 
         if( model.isFile && model.storage  ){
