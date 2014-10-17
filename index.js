@@ -1,60 +1,51 @@
-var config = require('./config')
+var _ = require('lodash')
+var fs = require('fs')
+var path = require('path')
 
+function requireDir( dir ){
+    var fs = require('fs')
+    var results = {}
 
-var userModule = {
-  models : require('./models'),
-  listen : require('./listen')(config),
-  //this will allow app global config overwrite
-  config : config,
-  route : {
-    "/user/count" : function( req, res, next){
-      userModule.dep.model.models['user'].count().then(function(total){
-        res.json({count:total})
-      })
-    },
-    "*" : {
-      "function" : function initSession(req,res,next){
-        //TODO only for dev
-        if( !req.session.user ){
-          userModule.dep.model.models['user'].count().then(function(total){
-            var skip = parseInt( total * Math.random())
-            userModule.dep.model.models['user'].find({limit:1,skip:skip}).then(function(users){
-//              console.log("====================setting session user===========", users[0].name)
-//              req.session.user = users[0]
-              next()
-            }).catch(function(err){
-              ZERO.error(err)
-              next()
-            })
-          })
-        }else{
-          next()
-        }
-
-
-
-
-        return
-
-//        if( req.session.user ){
-//          next()
-//        }else{
-//          //TODO only for dev
-//          userModule.dep.model.models['user'].find({limit:1}).then(function(users){
-//            req.session.user = users[0]
-//            next()
-//          }).catch(function(err){
-//            ZERO.error(err)
-//            next()
-//          })
-//        }
-
-      },
-      "order" : {first:true}
+  var sub = fs.readdirSync(path.join(__dirname,dir))
+  _.forEach( sub, function( s){
+    if( !/^\./.test(s)){
+      results[s] = require( "./" + path.join( dir, s))
     }
+  })
 
-  }
+  return results
 }
 
-module.exports = userModule
 
+
+module.exports = {
+  deps : ['bus','request'],
+  drivers : requireDir('./drivers'),
+  storage : {},
+  listen : {},
+  expand : function( module ){
+    var root = this
+    if( module.models ){
+      _.forEach( module.models, function( model){
+        ZERO.mlog('storage', 'handle', model.identity)
+        var storageInfo = {}
+
+        if( model.isFile && model.storage  ){
+          //find configuration for current model
+          storageInfo = _.isString( model.storage)  ? _.extend({driver:model.storage},module.config.storage[model.storage]) : model.storage
+          root.storage[model.identity] = _.extend(storageInfo,{model:model})
+        }
+      })
+    }
+  },
+  bootstrap : function(){
+    var root =this
+    _.forEach( root.storage, function( storageInfo ){
+      //this may add listener or request handlers
+      root.drivers[storageInfo.driver]( root, storageInfo)
+    })
+
+    root.dep.bus.expand( root )
+    root.dep.request.expand( root )
+  }
+}
